@@ -1,10 +1,6 @@
-import telegram
-from telegram.ext import Application, CommandHandler
-import asyncio
-import schedule
+from telegram.ext import Application, JobQueue, ContextTypes
+from typing import Optional
 import logging
-import threading
-import time
 
 from dotenv import load_dotenv
 import os
@@ -17,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 # Ваш токен от BotFather
 load_dotenv()
-TOKEN = str(os.environ.get("TELEGRAM_TOKEN"))
+BOT_TOKEN = str(os.environ.get("TELEGRAM_TOKEN"))
 
-if not TOKEN:
+if not BOT_TOKEN:
     print(
         "Ошибка: Не найден токен Telegram бота. Установите переменную окружения TELEGRAM_TOKEN или создайте файл .env."
     )
@@ -29,83 +25,33 @@ if not TOKEN:
 CHAT_ID = "YOUR CHAT ID"
 CHAT_ID = str(os.environ.get("TELEGRAM_CHAT_ID"))
 
-# Инициализация бота
-bot = telegram.Bot(token=TOKEN)
+
+async def send_periodic_message(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Функция, которая отправляет сообщение в чат."""
+    message = "Привет! Это сообщение отправляется каждые 20 секунд."
+    await context.bot.send_message(chat_id=CHAT_ID, text=message)
+    print("Сообщение отправлено!")
 
 
-# Асинхронная функция для отправки сообщения
-async def send_message():
-    try:
-        await bot.send_message(
-            chat_id=CHAT_ID, text="Привет! Это сообщение отправляется раз в минуту."
+def main() -> None:
+    """Основная функция для настройки и запуска бота."""
+    # Создаем приложение (Application) для работы с ботом
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # Получаем JobQueue из приложения с правильной аннотацией типа
+    job_queue: Optional[JobQueue] = application.job_queue
+
+    # Проверяем, что job_queue не None
+    if job_queue is None:
+        raise RuntimeError(
+            "JobQueue не инициализирован. Убедитесь, что он включен в настройках Application."
         )
-        logger.info("Сообщение успешно отправлено!")
-    except Exception as e:
-        logger.error(f"Ошибка при отправке сообщения: {e}")
 
+    # Планируем задачу отправки сообщения каждые 20 секунд
+    job_queue.run_repeating(send_periodic_message, interval=10, first=0)
 
-# Функция для запуска асинхронного цикла событий (для отправки сообщений)
-def run_async_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
-
-
-# Функция для запуска планировщика в отдельном потоке
-def run_scheduler():
-    schedule.every(interval=1).minutes.do(
-        lambda: asyncio.run_coroutine_threadsafe(
-            send_message(), asyncio.get_event_loop()
-        )
-    )
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-
-# Команда /start для проверки работы бота
-async def start(update, context):
-    await update.message.reply_text(
-        "Бот запущен! Я буду отправлять сообщение каждую минуту."
-    )
-    # Если вы не знаете ваш CHAT_ID, раскомментируйте следующую строку, чтобы узнать его
-    # await update.message.reply_text(f"Ваш CHAT_ID: {update.message.chat_id}")
-
-
-# Команда /stop для завершения работы с ботом
-async def stop(update, context):
-    # Получаем информацию о пользователе
-    user = update.message.from_user.first_name
-
-    # Отправляем прощальное сообщение
-    await update.message.reply_text(
-        f"До свидания, {user}! Если захотите вернуться, просто напишите /start."
-    )
-
-    # (Опционально) Очищаем данные пользователя, если они хранятся в context.user_data
-    context.user_data.clear()
-
-
-# Основная функция
-def main():
-    # Создаем Application (новый способ работы с python-telegram-bot)
-    application = Application.builder().token(TOKEN).build()
-
-    # Регистрируем команду /start и /stop
-    application.add_handler(CommandHandler(command="start", callback=start))
-    application.add_handler(CommandHandler(command="stop", callback=stop))
-
-    # Запускаем асинхронный цикл событий в отдельном потоке
-    async_loop_thread = threading.Thread(target=run_async_loop, daemon=True)
-    async_loop_thread.start()
-
-    # Запускаем планировщик в отдельном потоке
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-
-    # Запускаем бота (это блокирует основной поток)
-    logger.info("Бот запущен!")
-    application.run_polling(allowed_updates=None)
+    # Запускаем бота
+    application.run_polling(allowed_updates=[])
 
 
 if __name__ == "__main__":
