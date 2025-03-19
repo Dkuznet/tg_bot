@@ -1,41 +1,112 @@
-import telebot
+import telegram
+from telegram.ext import Application, CommandHandler
+import asyncio
+import schedule
+import logging
+import threading
+import time
 
 from dotenv import load_dotenv
 import os
 
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-# Создаем экземпляр бота, указав токен, который вы получили от @BotFather в Telegram
+# Ваш токен от BotFather
 load_dotenv()
 TOKEN = str(os.environ.get("TELEGRAM_TOKEN"))
 
-bot = telebot.TeleBot(TOKEN)
+if not TOKEN:
+    print(
+        "Ошибка: Не найден токен Telegram бота. Установите переменную окружения TELEGRAM_TOKEN или создайте файл .env."
+    )
+    exit()
+
+# ID чата, куда отправлять сообщения (можно получить через @userinfobot или логирование)
+CHAT_ID = "YOUR CHAT ID"
+CHAT_ID = str(os.environ.get("TELEGRAM_CHAT_ID"))
+
+# Инициализация бота
+bot = telegram.Bot(token=TOKEN)
 
 
-# Обработчик команды /start
-@bot.message_handler(commands=["start"])
-def send_welcome(message):
-    bot.reply_to(
-        message,
-        "Привет! Я твой бот. Напиши что-нибудь, и я повторю. Используй /help для справки.",
+# Асинхронная функция для отправки сообщения
+async def send_message():
+    try:
+        await bot.send_message(
+            chat_id=CHAT_ID, text="Привет! Это сообщение отправляется раз в минуту."
+        )
+        logger.info("Сообщение успешно отправлено!")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения: {e}")
+
+
+# Функция для запуска асинхронного цикла событий (для отправки сообщений)
+def run_async_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+# Функция для запуска планировщика в отдельном потоке
+def run_scheduler():
+    schedule.every(interval=1).minutes.do(
+        lambda: asyncio.run_coroutine_threadsafe(
+            send_message(), asyncio.get_event_loop()
+        )
+    )
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
+
+
+# Команда /start для проверки работы бота
+async def start(update, context):
+    await update.message.reply_text(
+        "Бот запущен! Я буду отправлять сообщение каждую минуту."
+    )
+    # Если вы не знаете ваш CHAT_ID, раскомментируйте следующую строку, чтобы узнать его
+    # await update.message.reply_text(f"Ваш CHAT_ID: {update.message.chat_id}")
+
+
+# Команда /stop для завершения работы с ботом
+async def stop(update, context):
+    # Получаем информацию о пользователе
+    user = update.message.from_user.first_name
+
+    # Отправляем прощальное сообщение
+    await update.message.reply_text(
+        f"До свидания, {user}! Если захотите вернуться, просто напишите /start."
     )
 
-
-# Обработчик команды /help
-@bot.message_handler(commands=["help"])
-def send_help(message):
-    bot.reply_to(
-        message,
-        "Я простой эхо-бот. Вот что я умею:\n/start - начать общение\n/help - показать эту справку\nПросто напиши текст, и я его повторю!",
-    )
+    # (Опционально) Очищаем данные пользователя, если они хранятся в context.user_data
+    context.user_data.clear()
 
 
-# Обработчик текстовых сообщений (эхо)
-@bot.message_handler(func=lambda message: True)
-def echo_all(message):
-    bot.reply_to(message, message.text)
+# Основная функция
+def main():
+    # Создаем Application (новый способ работы с python-telegram-bot)
+    application = Application.builder().token(TOKEN).build()
+
+    # Регистрируем команду /start и /stop
+    application.add_handler(CommandHandler(command="start", callback=start))
+    application.add_handler(CommandHandler(command="stop", callback=stop))
+
+    # Запускаем асинхронный цикл событий в отдельном потоке
+    async_loop_thread = threading.Thread(target=run_async_loop, daemon=True)
+    async_loop_thread.start()
+
+    # Запускаем планировщик в отдельном потоке
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+
+    # Запускаем бота (это блокирует основной поток)
+    logger.info("Бот запущен!")
+    application.run_polling(allowed_updates=None)
 
 
-# Запуск бота
 if __name__ == "__main__":
-    print("Бот запущен...")
-    bot.polling(none_stop=True)
+    main()
