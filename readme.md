@@ -1,4 +1,4 @@
-Telegram bot send one message per minute, queue_msg_bot
+Telegram bot send one message per minute, @queue_msg_bot
 
 узнать ID чата @userinfobot
 Запустите бота @userinfobot: Найдите бота @userinfobot в Telegram и начните с ним чат, нажав кнопку “Start”.

@@ -1,9 +1,14 @@
-from telegram.ext import Application, JobQueue, ContextTypes
+import telegram
+from telegram.ext import (
+    Application,
+    JobQueue,
+    ContextTypes,
+    CommandHandler,
+    CallbackContext,
+)
 from typing import Optional
 import logging
 
-from dotenv import load_dotenv
-import os
 
 # Настройка логирования
 logging.basicConfig(
@@ -12,6 +17,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Ваш токен от BotFather
+from dotenv import load_dotenv
+import os
+
 load_dotenv()
 BOT_TOKEN = str(os.environ.get("TELEGRAM_TOKEN"))
 
@@ -24,6 +32,18 @@ if not BOT_TOKEN:
 # ID чата, куда отправлять сообщения (можно получить через @userinfobot или логирование)
 CHAT_ID = "YOUR CHAT ID"
 CHAT_ID = str(os.environ.get("TELEGRAM_CHAT_ID"))
+
+
+# Функция для команды /start
+async def start(update, context):
+    update.message.reply_text("Бот запущен! Используйте /stop для остановки.")
+
+
+# Функция для команды /stop
+async def stop_bot(update, context):
+    update.message.reply_text("Останавливаю бота...")
+    context.application.stop_running()  # Останавливаем Application
+    logger.info("Бот остановлен.")
 
 
 async def send_periodic_message(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -47,6 +67,10 @@ def main() -> None:
             "JobQueue не инициализирован. Убедитесь, что он включен в настройках Application."
         )
 
+    # Регистрируем команды
+    application.add_handler(CommandHandler(command="start", callback=start))
+    application.add_handler(CommandHandler(command="stop bot", callback=stop_bot))
+
     # Планируем задачу отправки сообщения каждые 20 секунд
     job_queue.run_repeating(send_periodic_message, interval=10, first=0)
 
@@ -55,4 +79,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # print(f"CHAT_ID {CHAT_ID}")
     main()
