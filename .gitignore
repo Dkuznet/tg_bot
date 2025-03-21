@@ -4,4 +4,5 @@ __pycache__/
 *.pyc
 .vscode/
 *.log
+*.session
 bot2.py
