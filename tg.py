@@ -267,7 +267,7 @@ async def send_message(context) -> None:
     #     await collect_new_messages()
 
     size = len(channels["messages"])
-    logger.info(f"collect_new_messages: {size}")
+    logger.info(f"send_message: {size}")
     if size == 0:
         return
 
@@ -331,8 +331,9 @@ async def my_event_handler(event):
     if event.is_channel:
         print("event.chat_id", event.chat_id)
         print("event.chat.username", event.chat.username)
-        if event.chat.username in channels["name"]:
-            await collect_new_messages(event.chat.username)
+        channel_username = "@" + str(event.chat.username)
+        if channel_username in channels["name"]:
+            await collect_new_messages(channel_username)
 
         # in channels["min_id"] : #Используем ID
     # Или, если вы хотите использовать имя канала:
