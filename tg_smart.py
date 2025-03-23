@@ -1,119 +1,216 @@
 import logging
 import asyncio
-from telethon import TelegramClient, events
-from telethon.errors import FloodWaitError, RPCError, SessionPasswordNeededError
-from config import API_ID, API_HASH, PHONE, PASSWORD
+from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
+from config import (
+    API_ID,
+    API_HASH,
+    PHONE,
+    CHANNEL_ID,
+    SESSION,
+    SYSTEM_VERSION,
+    DEVICE_MODEL,
+    LANG_CODE,
+    SYSTEM_LANG_CODE,
+)
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("bot.log"),  # Логи будут сохраняться в файл
+        logging.FileHandler("tg.log"),  # Логи будут сохраняться в файл
         logging.StreamHandler(),  # Логи будут выводиться в консоль
     ],
 )
 logger = logging.getLogger(__name__)
 
-# Создание клиента
-SESSION_NAME = "bot_session"
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+
+client = TelegramClient(
+    session=SESSION,
+    api_id=API_ID,
+    api_hash=API_HASH,
+    system_version=SYSTEM_VERSION,
+    device_model=DEVICE_MODEL,
+    lang_code=LANG_CODE,
+    system_lang_code=SYSTEM_LANG_CODE,
+)
 
 
 # Функция для авторизации
-async def start_client():
+async def client_start():
     try:
         await client.start(phone=PHONE)  # type: ignore
         logger.info("Клиент успешно запущен!")
     except SessionPasswordNeededError:
-        # password = input("Введите пароль двухфакторной аутентификации: ")
-        await client.start(phone=PHONE, password=PASSWORD)  # type: ignore
+        password = input("Введите пароль двухфакторной аутентификации: ")
+        await client.start(phone=PHONE, password=password)  # type: ignore
         logger.info("Клиент успешно запущен с двухфакторной аутентификацией!")
     except Exception as e:
         logger.error(f"Ошибка при запуске клиента: {e}")
         raise
 
 
-# Обработчик команды /start
-@client.on(events.NewMessage(pattern=r"^/start$"))
-async def start_handler(event):
-    try:
-        user = await event.get_sender()
-        await event.reply(
-            f"Привет, {user.first_name}! Я бот, готовый помочь.\n"
-            "Доступные команды:\n"
-            "/start - Начать работу\n"
-            "/help - Получить помощь"
-        )
-        logger.info(f"Команда /start выполнена для пользователя {user.id}")
-    except FloodWaitError as e:
-        logger.error(f"Слишком много запросов. Ждем {e.seconds} секунд.")
-        await asyncio.sleep(e.seconds)
-        await event.reply("Пожалуйста, подождите немного и попробуйте снова.")
-    except RPCError as e:
-        logger.error(f"Ошибка Telegram API: {e}")
-        await event.reply("Произошла ошибка. Попробуйте позже.")
-    except Exception as e:
-        logger.error(f"Неизвестная ошибка: {e}")
-        await event.reply("Произошла неизвестная ошибка. Обратитесь к администратору.")
-
-
-# Обработчик команды /help
-@client.on(events.NewMessage(pattern=r"^/help$"))
-async def help_handler(event):
-    try:
-        await event.reply(
-            "Список доступных команд:\n"
-            "/start - Начать работу\n"
-            "/help - Получить помощь\n"
-            "Просто напишите мне что-нибудь, и я отвечу!"
-        )
-        logger.info(f"Команда /help выполнена для пользователя {event.sender_id}")
-    except FloodWaitError as e:
-        logger.error(f"Слишком много запросов. Ждем {e.seconds} секунд.")
-        await asyncio.sleep(e.seconds)
-        await event.reply("Пожалуйста, подождите немного и попробуйте снова.")
-    except RPCError as e:
-        logger.error(f"Ошибка Telegram API: {e}")
-        await event.reply("Произошла ошибка. Попробуйте позже.")
-    except Exception as e:
-        logger.error(f"Неизвестная ошибка: {e}")
-        await event.reply("Произошла неизвестная ошибка. Обратитесь к администратору.")
-
-
-# Обработчик всех текстовых сообщений (эхо)
-@client.on(events.NewMessage)  # type: ignore
-async def echo_handler(event):
-    try:
-        if event.is_private and not event.out:  # Только личные сообщения, не от бота
-            message_text = event.text.lower()
-            if message_text.startswith("/"):  # Игнорируем команды
-                return
-            await event.reply(
-                f"Вы написали: {event.text}\nЯ эхо-бот, повторяю за вами!"
+async def get_channel_messages(channel_username, limit=5):
+    """Получение последних сообщений из канала"""
+    # await client_start()
+    if not client.is_connected():
+        await client.connect()
+    messages = []
+    async for message in client.iter_messages(channel_username, limit=limit):
+        if message.text:  # Проверяем, что сообщение содержит текст
+            messages.append(
+                {
+                    "channel": channel_username,
+                    "text": message.text,
+                    "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
+                }
             )
-            logger.info(f"Эхо-сообщение отправлено пользователю {event.sender_id}")
-    except FloodWaitError as e:
-        logger.error(f"Слишком много запросов. Ждем {e.seconds} секунд.")
-        await asyncio.sleep(e.seconds)
-    except RPCError as e:
-        logger.error(f"Ошибка Telegram API: {e}")
+    return messages
+
+
+# async def main():
+# Getting information about yourself
+# me = await client.get_me()
+
+# "me" is a user object. You can pretty-print
+# any Telegram object with the "stringify" method:
+# print(me.stringify())
+
+# When you print something, you see a representation of it.
+# You can access all attributes of Telegram objects with
+# the dot operator. For example, to get the username:
+# username = me.username  # type: ignore
+# print(username)
+# print(me.phone)  # type: ignore
+
+# You can print all the dialogs/conversations that you are part of:
+# async for dialog in client.iter_dialogs():
+#     print(dialog.name, "has ID", dialog.id)
+
+# You can send messages to yourself...
+# await client.send_message("me", "Hello, myself!")
+# ...to some chat ID
+# await client.send_message(-100123456, 'Hello, group!')
+# ...to your contacts
+# await client.send_message('+34600123123', 'Hello, friend!')
+# ...or even to any username
+# await client.send_message('username', 'Testing Telethon!')
+
+# You can, of course, use markdown in your messages:
+# message = await client.send_message(
+#     "me",
+#     "This message has **bold**, `code`, __italics__ and "
+#     "a [nice website](https://example.com)!",
+#     link_preview=False,
+# )
+
+# Sending a message returns the sent message object, which you can use
+# print(message.raw_text)  # type: ignore
+
+# You can reply to messages directly if you have a message object
+# await message.reply('Cool!')
+
+# Or send files, songs, documents, albums...
+# await client.send_file('me', '/home/me/Pictures/holidays.jpg')
+
+# You can print the message history of any chat:
+# async for message in client.iter_messages('me'):
+#     print(message.id, message.text)
+
+# You can download media from messages, too!
+# The method will return the path where the file was saved.
+# if message.photo:
+#     path = await message.download_media()
+#     print('File saved to', path)  # printed after download is done
+
+CHANNELS = ["@bitkogan", "@dimsmirnov175"]
+
+
+async def start(update, context) -> None:
+    """Обработчик команды /start"""
+    await update.message.reply_text(
+        text="Привет! Я бот, который читает новости из публичных каналов. Используй /news, чтобы получить последние новости."
+    )
+
+
+async def news(update, context) -> None:
+    """Обработчик команды /news для получения новостей"""
+    await update.message.reply_text("Собираю новости, подождите...")
+
+    all_messages = []
+    for channel in CHANNELS:
+        messages = await get_channel_messages(channel)
+        all_messages.extend(messages)
+
+    if not all_messages:
+        await update.message.reply_text("Новостей пока нет.")
+        return
+
+    # Сортировка сообщений по дате (от новых к старым)
+    all_messages.sort(key=lambda x: x["date"], reverse=True)
+
+    # Формирование текста для отправки пользователю
+    response = "Последние новости:\n\n"
+    response = f"собрал {len(all_messages)} новостей"
+    await update.message.reply_text(response)
+
+    for msg in all_messages[:2]:  # Ограничиваем до 10 новостей
+        msg_text = f"{msg['channel']} ({msg['date']}):\n{msg['text']}\n\n"
+        # print(msg_text)
+        await update.message.reply_text(msg_text)
+
+
+# Асинхронная функция для команды /stop
+async def stop(update, context) -> None:
+    await update.message.reply_text("Останавливаю бота...")
+    await context.application.updater.stop()
+    context.application.stop_running()  # Останавливаем Application
+    logger.info("Бот остановлен.")
+
+
+async def print_channel_ids() -> None:
+    # You can print all the dialogs/conversations that you are part of:
+    async for dialog in client.iter_dialogs():
+        if dialog.id < 0:
+            print(dialog.name, "has ID", dialog.id)
+
+
+async def safe_connect() -> None:
+    # Попытка установить соединение, используя сохраненную сессию
+    try:
+        await client.connect()
+        if not await client.is_user_authorized():
+            print("User is not authorized. Starting authorization process...")
+            await client_start()  # Start authentication flow.
+        else:
+            print("User is already authorized.")
+
+        me = await client.get_me()
+        print(f"Connected as {me.first_name} {me.last_name}")  # type: ignore
+
     except Exception as e:
-        logger.error(f"Неизвестная ошибка: {e}")
+        print(f"An error occurred: {e}")
 
 
-# Главная функция для запуска бота
-async def main():
-    await start_client()
-    logger.info("Бот запущен и готов к работе!")
-    await client.run_until_disconnected()  # type: ignore
+async def main() -> None:
+    # Запуск бота
+    await safe_connect()
+
+    # You can send messages to yourself...
+    # await client.send_message("me", "Hello, myself!")
+
+    # await print_channel_ids()
+
+    await client.send_message(CHANNEL_ID, "Hello, channel!")
+
+    await client.disconnect()  # type: ignore
 
 
 if __name__ == "__main__":
     try:
-        with client:
-            client.loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем.")
+        print("Программа завершена пользователем.")
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}")
+        print(f"Произошла ошибка: {e}")
