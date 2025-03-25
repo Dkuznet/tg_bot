@@ -20,7 +20,8 @@ from config import (
 )
 
 channels = {
-    "name": [],
+    "id": [],
+    "name": {},
     "min_id": {},
     "messages": [],
 }
@@ -73,8 +74,11 @@ def load_channels() -> list[str]:
     lines = read_file(filename=CHANNELS_FILENAME)
     names = []
     for line in lines:
-        if len(line) > 0 and line[0] == "@":
-            names.append(line.split("->")[0].strip())
+        if len(line) > 0 and line[0] == "#":
+            continue
+        if len(line) > 0:
+            id = int(line.split(",")[0].strip())
+            names.append(id)
 
     return list(set(names))
 
@@ -100,13 +104,10 @@ async def start(update, context) -> None:
     )
 
 
-CHANNELS = ["@bitkogan", "@dimsmirnov175"]
-
-
 async def news(update, context) -> None:
     """Обработчик команды /news для получения новостей"""
     await update.message.reply_text("Собираю новости, подождите...")
-
+    CHANNELS = ["@bitkogan", "@dimsmirnov175"]
     all_messages = []
     for channel in CHANNELS:
         messages = await get_channel_messages(channel)
@@ -201,23 +202,22 @@ async def debug(update, context) -> None:
     print("Получено обновление:", update)
 
 
-async def get_channel_messages(channel_name, min_id=0, limit_global=10):
+async def get_channel_messages(channel_id, min_id=0, limit_global=10):
     """Получение последних сообщений из канала"""
-
     if not client.is_connected():
         await client.connect()
     messages = []
 
     limit: int = 1 if min_id == 0 else limit_global
     max_id = min_id
-    async for message in client.iter_messages(channel_name, min_id=min_id, limit=limit):
+    async for message in client.iter_messages(channel_id, min_id=min_id, limit=limit):
         max_id: int = max(max_id, message.id)
-        if message.text and min_id > 0:  # Проверяем, что сообщение содержит текст
+        if message.text:  # Проверяем, что сообщение содержит текст
             # print(message.date, dir(message.date))
             dt = message.date + timedelta(hours=3)
             messages.append(
                 {
-                    "channel": channel_name,
+                    "channel": channels["name"].get(channel_id, ""),
                     "text": message.text,
                     "date": dt.strftime("%Y-%m-%d %H:%M:%S"),
                 }
@@ -226,17 +226,17 @@ async def get_channel_messages(channel_name, min_id=0, limit_global=10):
     return messages, max_id
 
 
-async def collect_new_messages(channel_name=None):
+async def collect_new_messages(channel_id=None):
     print("collect_new_messages min_id counts:", len(channels["min_id"]))
     group_channels = channels["name"]
-    if channel_name and channel_name in channels["name"]:
-        group_channels = [channel_name]
-    for channel_name in group_channels:
-        min_id: int = channels["min_id"].get(channel_name, 0)
+    if channel_id and channel_id in channels["name"]:
+        group_channels = [channel_id]
+    for channel_id in group_channels:
+        min_id: int = channels["min_id"].get(channel_id, 0)
         new_messages, max_id = await get_channel_messages(
-            channel_name=channel_name, min_id=min_id
+            channel_id=channel_id, min_id=min_id
         )
-        channels["min_id"][channel_name] = max_id
+        channels["min_id"][channel_id] = max_id
         channels["messages"].extend(new_messages)
         await asyncio.sleep(0.1)
 
@@ -253,7 +253,7 @@ def process_msg(message) -> str:
     return text
 
 
-import time
+# import time
 
 # start_update_time = 0
 
@@ -321,7 +321,8 @@ async def print_channel_names() -> None:
         # if hasattr(dialog.entity, "tittle") and dialog.entity.tittle:
         title = dialog.name
 
-        print("@" + username, "->", title)
+        # print("@" + username, "->", title)
+        print(str(dialog.id) + ",", title)
 
 
 @client.on(events.NewMessage)  # type: ignore
@@ -331,9 +332,12 @@ async def my_event_handler(event):
     if event.is_channel:
         print("event.chat_id", event.chat_id)
         print("event.chat.username", event.chat.username)
+        channel_id = int(event.chat_id)
         channel_username = "@" + str(event.chat.username)
-        if channel_username in channels["name"]:
-            await collect_new_messages(channel_username)
+
+        channels["name"][channel_id] = channel_username
+        if channel_id in channels["id"]:
+            await collect_new_messages(channel_id)
 
         # in channels["min_id"] : #Используем ID
     # Или, если вы хотите использовать имя канала:
@@ -345,13 +349,17 @@ async def my_event_handler(event):
 
 async def main():
     """Запуск клиента и бота"""
+    # await safe_client_connect()
+    # await print_channel_names()
+    # await client.disconnect()  # type: ignore
+    # return
+
+    channels["id"] = load_channels()
+    print(len(channels["id"]))
+    print(channels["id"])
+    # return
 
     await safe_client_connect()
-
-    # await print_channel_names()
-    channels["name"] = load_channels()
-    print(len(channels["name"]))
-    print(channels["name"])
 
     application = await bot_create()
 
