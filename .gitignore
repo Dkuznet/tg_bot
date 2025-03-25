@@ -5,5 +5,4 @@ __pycache__/
 .vscode/
 *.log
 *.session
-bot2.py
 channels.txt
